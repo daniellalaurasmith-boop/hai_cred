@@ -1,0 +1,204 @@
+var $messages = $('.messages-content'),
+    d, h, m,
+    i = 0;
+ 
+var active = false;
+var offTopicCount = 0;
+ 
+$(window).load(function() {
+  $messages.mCustomScrollbar();
+});
+ 
+function updateScrollbar() {
+  $messages.mCustomScrollbar("update").mCustomScrollbar('scrollTo', 'bottom', {
+    scrollInertia: 10,
+    timeout: 0
+  });
+}
+ 
+function post_sheet(msg, ai_response, session_id) {
+  document.getElementById("user_content").value = msg;
+  document.getElementById("AI_content").value = ai_response;
+  document.getElementById("session_id").value = session_id;
+ 
+  var request;
+  if (request) request.abort();
+ 
+  var $form = $("#post_data");
+  var $inputs = $form.find("input, select, textarea");
+  var serializedData = $form.serialize();
+ 
+  $inputs.prop("disabled", true);
+ 
+  request = $.ajax({
+    url: "https://script.google.com/macros/s/AKfycbw3UrSPK1tgWkEjp3G3fNP0AfG2JxVP78dFJXLR_09Klx4P5DGj7Sc0NnILUTWYvIRl/exec",
+    type: "post",
+    data: serializedData
+  });
+ 
+  request.fail(function(jqXHR, textStatus, errorThrown) {
+    console.error("Sheet post error: " + textStatus, errorThrown);
+  });
+ 
+  request.always(function() {
+    $inputs.prop("disabled", false);
+  });
+}
+ 
+function setDate() {
+  d = new Date();
+  if (m != d.getMinutes()) {
+    m = d.getMinutes();
+    var timeStr = d.getHours() + ':' + (m < 10 ? '0' + m : m);
+    $('<div class="timestamp">' + timeStr + '</div>').appendTo($('.message:last'));
+  }
+}
+ 
+function chatReply() {
+  active = true;
+  console.log("chatReply");
+  setTimeout(function() {
+    call_GPT5_4(msg);
+  }, 0);
+}
+ 
+function waitInactive() {
+  console.log("waitInactive");
+  if (!active) {
+    console.log("inactive — proceeding");
+    chatReply();
+  }
+}
+ 
+function insertMessage() {
+  console.log("insertMessage");
+  msg = $('.message-input').val();
+  if ($.trim(msg) == '') return false;
+ 
+  $('<div class="message message-personal">' + msg + '</div>')
+    .appendTo($('.mCSB_container'))
+    .addClass('new');
+  setDate();
+  $('.message-input').val(null);
+  updateScrollbar();
+  console.log(msg);
+ 
+  waitInactive();
+}
+ 
+function start() {
+  console.log("start");
+  msg = '';
+  var sID = new Date();
+  var sIDtxt = sID.toISOString();
+  document.getElementById("session_id").value = sIDtxt;
+  console.log(sIDtxt);
+  window.parent.parent.postMessage(sIDtxt, "*");
+ 
+  setTimeout(function() {
+    fakeMessage("How can I help you today?");
+  }, 0);
+}
+ 
+$('.message-submit').click(function() {
+  insertMessage();
+});
+ 
+$(window).on('keydown', function(e) {
+  if (e.which == 13) {
+    insertMessage();
+    return false;
+  }
+});
+ 
+function fakeMessage(text_to_display) {
+  console.log("fakeMessage");
+  $('<div class="message loading new"><figure class="avatar"><img src="https://file.garden/Zdgccpzmo3pLm1w2/Melu.png" /></figure><span></span></div>')
+    .appendTo($('.mCSB_container'));
+  updateScrollbar();
+ 
+  setTimeout(function() {
+    $('.message.loading').remove();
+    $('<div class="message new"><figure class="avatar"><img src="https://file.garden/Zdgccpzmo3pLm1w2/Melu.png" /></figure>' + text_to_display + '</div>')
+      .appendTo($('.mCSB_container'))
+      .addClass('new');
+    setDate();
+    updateScrollbar();
+    i++;
+    active = false;
+  }, 1000 + (Math.random() * 20) * 40 + text_to_display.length * 10);
+ 
+  post_sheet(msg, text_to_display, document.getElementById("session_id").value);
+}
+ 
+// ─── OpenAI Responses API ───────────────────────────────────────────────────
+ 
+var conversation_history = [];
+ 
+var system_prompt = `You are Lexi, a general purpose AI assistant designed to assist with a wide range of tasks and questions.`;
+ 
+function call_GPT5_4(human_say) {
+  human_say = human_say || "\n";
+  console.log("call_GPT5_4");
+ 
+  conversation_history.push({
+    role: "user",
+    content: human_say
+  });
+ 
+  var xhr = new XMLHttpRequest();
+  xhr.open("POST", "https://api.openai.com/v1/responses");
+  xhr.setRequestHeader("Content-Type", "application/json");
+  xhr.setRequestHeader("Authorization", "Bearer OPENAI API KEY HERE");
+ 
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      console.log(xhr.responseText);
+ 
+      var parsed;
+      try {
+        parsed = JSON.parse(xhr.responseText);
+      } catch (e) {
+        console.error("Failed to parse API response:", e);
+        active = false;
+        return;
+      }
+ 
+      // Guard against API errors (wrong key, rate limit, etc.)
+      if (!parsed.output) {
+        console.error("API error response:", parsed);
+        active = false;
+        return;
+      }
+ 
+      // Extract the text block from the output array
+      var output = parsed.output;
+      var textBlock = output
+        .flatMap(function(item) { return item.content || []; })
+        .find(function(c) { return c.type === "output_text"; });
+ 
+      var GPT5_4_text = textBlock ? textBlock.text : "";
+      GPT5_4_text = GPT5_4_text.replace("Lexi: ", "");
+ 
+      if (GPT5_4_text != null && GPT5_4_text != '') {
+        // Store assistant reply in the format the Responses API expects
+        conversation_history.push({
+          role: "assistant",
+          content: [{ type: "output_text", text: GPT5_4_text }]
+        });
+        fakeMessage(GPT5_4_text);
+      } else {
+        console.warn("Empty response from API");
+        active = false;
+      }
+    }
+  };
+ 
+  xhr.send(JSON.stringify({
+    model: "gpt-5.4",
+    instructions: system_prompt,
+    input: conversation_history
+  }));
+}
+ 
+start();
