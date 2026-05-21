@@ -135,7 +135,7 @@ function fakeMessage(text_to_display) {
  
 var conversation_history = [];
  
-var system_prompt = `You are Lexi, a general purpose AI assistant designed to assist with a wide range of tasks and questions.`;
+var system_prompt = `You are Lexi, a conversational AI assistant. You can help with a wide range of tasks including answering questions,research, and general conversation. Be clear, direct, and helpful.`;
  
 function call_GPT5_4(human_say) {
   human_say = human_say || "\n";
@@ -149,7 +149,7 @@ function call_GPT5_4(human_say) {
   var xhr = new XMLHttpRequest();
   xhr.open("POST", "https://api.openai.com/v1/responses");
   xhr.setRequestHeader("Content-Type", "application/json");
-  xhr.setRequestHeader("Authorization", "Bearer YOUR_OPENAI_API_KEY_HERE");
+  xhr.setRequestHeader("Authorization", "Bearer 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");
  
   xhr.onreadystatechange = function() {
     if (xhr.readyState === 4) {
